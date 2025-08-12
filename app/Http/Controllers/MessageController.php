@@ -1,0 +1,136 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Contact;
+use App\Services\MessageService;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class MessageController extends Controller
+{
+    protected $smsService;
+    protected $whatsappService;
+
+    public function __construct()
+    {
+        // Resolve services from the container
+        $this->smsService = app('SMSService');
+        $this->whatsappService = app('WhatsAppService');
+    }
+
+    public function create(): Response
+    {
+        $users = Contact::select('id', 'name', 'phone', 'email')
+            ->latest()
+            ->get();
+
+        return Inertia::render('sendMessage/index', [
+            'users' => $users
+        ]);
+    }
+
+    public function schedule(): Response
+    {
+        $users = Contact::select('id', 'name', 'phone', 'email')
+            ->latest()
+            ->get();
+
+        return Inertia::render('schedule/index', [
+            'users' => $users
+        ]);
+    }
+
+    public function send(Request $request)
+    {
+        $validated = $request->validate([
+            'content' => 'required|string|max:1000',
+            'type' => 'required|in:sms,whatsapp',
+            'recipients' => 'required|array|min:1',
+            'recipients.*' => 'exists:contacts,id',
+            'scheduledAt' => 'nullable|date|after:now',
+        ]);
+
+        try {
+            // Get phone numbers for selected contacts
+            $phoneNumbers = Contact::whereIn('id', $validated['recipients'])
+                ->pluck('phone')
+                ->toArray();
+
+            if (empty($phoneNumbers)) {
+                return redirect()->route('dashboard')->with('error', 'No valid phone numbers found for selected recipients');
+            }
+
+            if ($validated['type'] === 'sms') {
+                return $this->sendSMS($phoneNumbers, $validated['content']);
+            } elseif ($validated['type'] === 'whatsapp') {
+                return $this->sendWhatsApp($phoneNumbers, $validated['content']);
+            }
+
+            return redirect()->route('dashboard')->with('error', 'Invalid message type');
+        } catch (\Exception $e) {
+            return redirect()->route('dashboard')->with('error', 'Failed to process message: ' . $e->getMessage());
+        }
+    }
+
+    private function sendSMS(array $phoneNumbers, string $message)
+    {
+        // Format phone numbers for SMS
+        $formattedNumbers = $this->smsService->formatPhoneNumbers($phoneNumbers);
+
+        // Send SMS
+        $result = $this->smsService->sendBulkSMS(
+            $formattedNumbers,
+            $message,
+            config('app.name')
+        );
+
+        if ($result['success']) {
+            return redirect()->route('dashboard')->with('success', $result['message']);
+        }
+
+        return redirect()->route('dashboard')->with('error', $result['message']);
+    }
+
+    private function sendWhatsApp(array $phoneNumbers, string $message)
+    {
+        // Format phone numbers for WhatsApp (ensure they're in E.164 format)
+        $formattedNumbers = $this->formatPhoneNumbersForWhatsApp($phoneNumbers);
+
+        // Send WhatsApp messages
+        $result = $this->whatsappService->sendBulkWhatsApp($formattedNumbers, $message);
+
+        if ($result['success']) {
+            return redirect()->route('dashboard')->with('success', $result['message']);
+        }
+
+        return redirect()->route('dashboard')->with('error', $result['message']);
+    }
+
+    private function formatPhoneNumbersForWhatsApp(array $numbers, string $defaultCountryCode = '254'): array
+    {
+        $formattedNumbers = [];
+
+        foreach ($numbers as $number) {
+            $cleaned = preg_replace('/[^0-9]/', '', $number);
+
+            // Format for WhatsApp (E.164 format without + prefix for Twilio)
+            if (strlen($cleaned) === 9 && strpos($cleaned, '0') !== 0) {
+                $formatted = $defaultCountryCode . $cleaned;
+            } elseif (strlen($cleaned) === 10 && strpos($cleaned, '0') === 0) {
+                $formatted = $defaultCountryCode . substr($cleaned, 1);
+            } elseif (strlen($cleaned) === 12 && strpos($cleaned, '254') === 0) {
+                $formatted = $cleaned;
+            } elseif (strlen($cleaned) === 13 && strpos($cleaned, '+254') === 0) {
+                $formatted = substr($cleaned, 1); // Remove the + prefix
+            } else {
+                $formatted = $defaultCountryCode . $cleaned;
+            }
+
+            $formattedNumbers[] = '+' . $formatted;
+        }
+
+        return $formattedNumbers;
+    }
+}
