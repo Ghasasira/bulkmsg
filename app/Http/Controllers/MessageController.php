@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Contact;
 use App\Services\MessageService;
+use App\Services\BulkSMSService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -13,11 +14,10 @@ class MessageController extends Controller
     protected $smsService;
     protected $whatsappService;
 
-    public function __construct()
+    public function __construct(BulkSMSService $smsService) // <-- inject here
     {
-        // Resolve services from the container
-        $this->smsService = app('SMSService');
-        $this->whatsappService = app('WhatsAppService');
+        $this->smsService = $smsService;
+        $this->whatsappService = app('WhatsAppService'); // Keep WhatsApp as before
     }
 
     public function create(): Response
@@ -62,6 +62,8 @@ class MessageController extends Controller
                 return redirect()->route('dashboard')->with('error', 'No valid phone numbers found for selected recipients');
             }
 
+            // dd($phoneNumbers);
+
             if ($validated['type'] === 'sms') {
                 return $this->sendSMS($phoneNumbers, $validated['content']);
             } elseif ($validated['type'] === 'whatsapp') {
@@ -76,12 +78,9 @@ class MessageController extends Controller
 
     private function sendSMS(array $phoneNumbers, string $message)
     {
-        // Format phone numbers for SMS
-        $formattedNumbers = $this->smsService->formatPhoneNumbers($phoneNumbers);
-
-        // Send SMS
-        $result = $this->smsService->sendBulkSMS(
-            $formattedNumbers,
+        // BulkSMSService handles formatting internally, so no pre-formatting needed
+        $result = $this->smsService->sendBulkSms(
+            $phoneNumbers,
             $message,
             config('app.name')
         );
@@ -89,9 +88,10 @@ class MessageController extends Controller
         if ($result['success']) {
             return redirect()->route('dashboard')->with('success', $result['message']);
         }
-
+        dd($result['message']);
         return redirect()->route('dashboard')->with('error', $result['message']);
     }
+
 
     private function sendWhatsApp(array $phoneNumbers, string $message)
     {
