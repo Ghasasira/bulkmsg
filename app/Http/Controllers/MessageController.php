@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Contact;
+use App\Models\Customer;
 use App\Services\MessageService;
 use App\Services\BulkSMSService;
 use Illuminate\Http\Request;
@@ -22,7 +23,7 @@ class MessageController extends Controller
 
     public function create(): Response
     {
-        $users = Contact::select('id', 'name', 'phone', 'email')
+        $users = Customer::select('id', 'name', 'number1')
             ->latest()
             ->get();
 
@@ -48,14 +49,14 @@ class MessageController extends Controller
             'content' => 'required|string|max:1000',
             'type' => 'required|in:sms,whatsapp',
             'recipients' => 'required|array|min:1',
-            'recipients.*' => 'exists:contacts,id',
+            'recipients.*' => 'exists:customers,id',
             'scheduledAt' => 'nullable|date|after:now',
         ]);
 
         try {
             // Get phone numbers for selected contacts
-            $phoneNumbers = Contact::whereIn('id', $validated['recipients'])
-                ->pluck('phone')
+            $phoneNumbers = Customer::whereIn('id', $validated['recipients'])
+                ->pluck('number1')
                 ->toArray();
 
             if (empty($phoneNumbers)) {
@@ -85,10 +86,12 @@ class MessageController extends Controller
             config('app.name')
         );
 
+        // dd($result);
+
         if ($result['success']) {
             return redirect()->route('dashboard')->with('success', $result['message']);
         }
-        dd($result['message']);
+        // dd($result['message']);
         return redirect()->route('dashboard')->with('error', $result['message']);
     }
 

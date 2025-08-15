@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ContactsController;
+use App\Http\Controllers\CustomerImportController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -16,7 +17,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/create', [MessageController::class, 'create'])->name('messages');
         Route::get('/schedule', [MessageController::class, 'schedule'])->name('schedule');
         Route::post('/send', [MessageController::class, 'send'])->name('send');
+        // routes/web.php
     });
+
+    Route::post('/customers/import', [CustomerImportController::class, 'import'])->name('customers.import');
+
     // Route::get('schedule', function () {
     //     return Inertia::render('schedule/index');
     // })->name('schedule');
