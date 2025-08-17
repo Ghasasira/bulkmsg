@@ -21,6 +21,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::post('/customers/import', [CustomerImportController::class, 'import'])->name('customers.import');
+    Route::delete('/customers/empty', [ContactsController::class, 'emptyCustomerTable'])->name('customers.empty');
 
     // Route::get('schedule', function () {
     //     return Inertia::render('schedule/index');

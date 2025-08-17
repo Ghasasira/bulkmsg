@@ -16,11 +16,10 @@ class CustomersImport implements ToModel, WithHeadingRow
     public function model(array $row)
     {
         return new Customer([
-            'name'      => $row['cust_name'],
-            'local_amt'  => str_replace(',', '', $row['local_amt']), // Remove commas
-            'no_due_days' => $row['no_due_days'],
-            'number1'    => $row['number_1'],
-            'number2'    => $row['number_2'],
+            'name'        => $row['name'], // Lowercase
+            'local_amt'   => str_replace(',', '', $row['amount']), // Remove commas
+            'no_due_days' => $row['pastdue'], // Lowercase
+            'number1'     => $row['contact'], // Lowercase
         ]);
     }
 }

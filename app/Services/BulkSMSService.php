@@ -24,52 +24,204 @@ class BulkSMSService
     /**
      * Send bulk SMS with enhanced error handling and batch processing
      */
+    // public function sendBulkSms(
+    //     $customers,
+    //     string $message,
+    //     string $senderId = 'Default',
+    //     string $defaultCountryCode = '256',
+    //     bool $processByBatch = true
+    // ): array {
+    //     try {
+    //         // Validate inputs
+    //         $this->validateInputs($customers, $message, $senderId);
+
+
+
+    //         // Format and deduplicate phone numbers
+    //         $formattedNumbers = array_unique($this->formatPhoneNumbers($phoneNumbers, $defaultCountryCode));
+
+    //         if (empty($formattedNumbers)) {
+    //             throw new Exception("No valid phone numbers found.");
+    //         }
+
+    //         // Process in batches if requested and needed
+    //         if ($processByBatch && count($formattedNumbers) > $this->batchSize) {
+    //             return $this->processBatches($formattedNumbers, $message, $senderId);
+    //         }
+
+    //         // Process single batch
+    //         return $this->processSingleBatch($formattedNumbers, $message, $senderId);
+    //     } catch (Exception $e) {
+    //         Log::error('BulkSMS Error: ' . $e->getMessage(), [
+    //             'phone_numbers_count' => count($phoneNumbers ?? []),
+    //             'message_length' => strlen($message ?? ''),
+    //             'sender_id' => $senderId
+    //         ]);
+
+    //         $this->logMessage($message, $phoneNumbers, 0, count($phoneNumbers), [], $e->getMessage());
+
+    //         return [
+    //             'success' => false,
+    //             'message' => $e->getMessage(),
+    //             'data' => [
+    //                 'total' => count($phoneNumbers),
+    //                 'successful' => 0,
+    //                 'failed' => count($phoneNumbers),
+    //                 'details' => []
+    //             ]
+    //         ];
+    //     }
+    // }
+
     public function sendBulkSms(
-        array $phoneNumbers,
+        $customers,
         string $message,
         string $senderId = 'Default',
         string $defaultCountryCode = '256',
         bool $processByBatch = true
     ): array {
         try {
-            // Validate inputs
-            $this->validateInputs($phoneNumbers, $message, $senderId);
-
-            // Format and deduplicate phone numbers
-            $formattedNumbers = array_unique($this->formatPhoneNumbers($phoneNumbers, $defaultCountryCode));
-
-            if (empty($formattedNumbers)) {
-                throw new Exception("No valid phone numbers found.");
+            if ($customers->isEmpty()) {
+                // dd("no numbers");
+                throw new Exception("No customers provided.");
             }
 
-            // Process in batches if requested and needed
-            if ($processByBatch && count($formattedNumbers) > $this->batchSize) {
-                return $this->processBatches($formattedNumbers, $message, $senderId);
+            // Prepare numbers + personalized messages
+            $messagesData = [];
+            foreach ($customers as $customer) {
+                $formattedNumber = $this->formatPhoneNumbers([$customer->number1], $defaultCountryCode);
+
+                if (!empty($formattedNumber)) {
+                    $personalizedMessage = $this->customizeMessage($message, $customer);
+                    $messagesData[] = [
+                        'number'  => $formattedNumber[0],
+                        'message' => $personalizedMessage,
+                        'customer_id' => $customer->id
+                    ];
+                }
             }
 
-            // Process single batch
-            return $this->processSingleBatch($formattedNumbers, $message, $senderId);
+            // // dd($messagesData);
+
+            if (empty($messagesData)) {
+                throw new Exception("No valid customer phone numbers found.");
+            }
+
+            // // dd($messagesData);
+            // If batching is enabled
+            if ($processByBatch && count($messagesData) > $this->batchSize) {
+                // dd("batching");
+                return $this->processCustomerBatches($messagesData, $senderId);
+            }
+
+            // Otherwise, single batch
+            // // dd("no batching");
+            return $this->processCustomerBatch($messagesData, $senderId);
         } catch (Exception $e) {
-            Log::error('BulkSMS Error: ' . $e->getMessage(), [
-                'phone_numbers_count' => count($phoneNumbers ?? []),
-                'message_length' => strlen($message ?? ''),
-                'sender_id' => $senderId
-            ]);
-
-            $this->logMessage($message, $phoneNumbers, 0, count($phoneNumbers), [], $e->getMessage());
+            Log::error('BulkSMS Error: ' . $e->getMessage());
 
             return [
                 'success' => false,
                 'message' => $e->getMessage(),
                 'data' => [
-                    'total' => count($phoneNumbers),
+                    'total' => $customers->count(),
                     'successful' => 0,
-                    'failed' => count($phoneNumbers),
+                    'failed' => $customers->count(),
                     'details' => []
                 ]
             ];
         }
     }
+
+    private function customizeMessage(string $template, $customer): string
+    {
+        try {
+            $replacements = [
+                'NAME'     => $customer->name ?? '',
+                'AMOUNT'   => $customer->local_amt ?? '',
+                'PASTDUE' => $customer->no_due_days ?? '',
+            ];
+
+            $message = $template;
+            foreach ($replacements as $key => $value) {
+                $message = str_replace(strtoupper($key), $value, $message);
+            }
+
+            return $message;
+        } catch (Exception $e) {
+            // dd('failed to customize' . $e);
+            throw new Exception("Something went wrong.");
+        }
+    }
+
+    private function processCustomerBatches(array $messagesData, string $senderId): array
+    {
+        // // dd("we here...");
+        $batches = array_chunk($messagesData, $this->batchSize);
+        $aggregatedStats = [
+            'total' => count($messagesData),
+            'successful' => 0,
+            'failed' => 0,
+            'details' => []
+        ];
+
+        foreach ($batches as $batchIndex => $batch) {
+            Log::info("Processing customer SMS batch " . ($batchIndex + 1));
+
+            $batchResult = $this->processCustomerBatch($batch, $senderId, false);
+
+            $aggregatedStats['successful'] += $batchResult['data']['successful'];
+            $aggregatedStats['failed'] += $batchResult['data']['failed'];
+            $aggregatedStats['details'] = array_merge($aggregatedStats['details'], $batchResult['data']['details']);
+
+            usleep(500000); // half second delay
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Bulk SMS processing completed',
+            'data' => $aggregatedStats
+        ];
+    }
+
+    private function processCustomerBatch(array $messagesData, string $senderId, bool $shouldLog = true): array
+    {
+        $msgData = [];
+        foreach ($messagesData as $msg) {
+            $msgData[] = [
+                'number'   => $msg['number'],
+                'message'  => $msg['message'],
+                'senderid' => $senderId
+            ];
+        }
+
+        // // dd($msgData);
+
+        $payload = $this->buildPayload($msgData);
+        // // dd($payload);
+        $response = $this->sendWithRetry($payload);
+        // dd($response);
+
+        $stats = $this->processResponse($response, $msgData);
+
+        if ($shouldLog) {
+            $this->logMessage(
+                "Bulk Personalized Message",
+                array_column($messagesData, 'number'),
+                $stats['successful'],
+                $stats['failed'],
+                $stats['details']
+            );
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Customer SMS batch processed',
+            'data' => $stats
+        ];
+    }
+
+
 
     /**
      * Process messages in batches to handle large volumes
@@ -87,7 +239,7 @@ class BulkSMSService
 
         foreach ($batches as $batchIndex => $batch) {
             Log::info("Processing SMS batch " . ($batchIndex + 1) . " of " . count($batches));
-
+            // dd("we here...");
             $batchResult = $this->processSingleBatch($batch, $message, $senderId, false); // Don't log individual batches
 
             $aggregatedStats['successful'] += $batchResult['data']['successful'];
@@ -117,11 +269,15 @@ class BulkSMSService
      */
     private function processSingleBatch(array $numbers, string $message, string $senderId, bool $shouldLog = true): array
     {
+        // dd("we here...");
         $msgData = $this->buildMessageData($numbers, $message, $senderId);
+        // dd("we here...1");
         $payload = $this->buildPayload($msgData);
 
+        // dd("we here... 2");
         // Attempt to send with retries
         $response = $this->sendWithRetry($payload);
+        // dd("we here yet?");
 
         // Process response and generate stats
         $stats = $this->processResponse($response, $msgData);
@@ -174,6 +330,7 @@ class BulkSMSService
      */
     private function sendWithRetry(array $payload): array
     {
+        // // dd($payload);
         $lastException = null;
 
         for ($attempt = 1; $attempt <= $this->maxRetriesPerBatch; $attempt++) {
@@ -184,12 +341,17 @@ class BulkSMSService
                     ->withHeaders(['Content-Type' => 'application/json'])
                     ->post($this->apiUrl, $payload);
 
+
                 if ($response->successful()) {
+                    // dd("success");
                     return $response->json() ?? [];
                 } else {
+                    // dd("failure");
                     throw new RequestException($response);
                 }
             } catch (Exception $e) {
+                // // dd($e . ".......wooo....");
+
                 $lastException = $e;
                 Log::warning("SMS API attempt $attempt failed: " . $e->getMessage());
 
@@ -200,6 +362,7 @@ class BulkSMSService
         }
 
         // All attempts failed
+        // dd('all failed');
         throw new Exception("Failed to send SMS after {$this->maxRetriesPerBatch} attempts. Last error: " . $lastException->getMessage());
     }
 
@@ -208,45 +371,50 @@ class BulkSMSService
      */
     private function processResponse(array $response, array $msgData): array
     {
-        $stats = [
-            'total' => count($msgData),
-            'successful' => 0,
-            'failed' => 0,
-            'details' => []
-        ];
+        try {
+            $stats = [
+                'total' => count($msgData),
+                'successful' => 0,
+                'failed' => 0,
+                'details' => []
+            ];
 
-        Log::info('EgoSMS API Response:', $response);
+            Log::info('EgoSMS API Response:', $response);
 
-        // Check for different response formats
-        $isSuccess = $this->isResponseSuccessful($response);
+            // Check for different response formats
+            $isSuccess = $this->isResponseSuccessful($response);
 
-        if ($isSuccess) {
-            // All messages successful
-            foreach ($msgData as $msg) {
-                $stats['successful']++;
-                $stats['details'][] = [
-                    'number' => $msg['number'],
-                    'status' => 'success',
-                    'message_status' => 'Sent',
-                    'api_response' => $response['Message'] ?? $response['message'] ?? 'Success'
-                ];
+            if ($isSuccess) {
+                // All messages successful
+                foreach ($msgData as $msg) {
+                    $stats['successful']++;
+                    $stats['details'][] = [
+                        'number' => $msg['number'],
+                        'status' => 'success',
+                        'message_status' => 'Sent',
+                        'api_response' => $response['Message'] ?? $response['message'] ?? 'Success'
+                    ];
+                }
+            } else {
+                // Handle different types of failures
+                $errorMessage = $this->extractErrorMessage($response);
+
+                foreach ($msgData as $msg) {
+                    $stats['failed']++;
+                    $stats['details'][] = [
+                        'number' => $msg['number'],
+                        'status' => 'error',
+                        'message_status' => $errorMessage,
+                        'api_response' => $response
+                    ];
+                }
             }
-        } else {
-            // Handle different types of failures
-            $errorMessage = $this->extractErrorMessage($response);
 
-            foreach ($msgData as $msg) {
-                $stats['failed']++;
-                $stats['details'][] = [
-                    'number' => $msg['number'],
-                    'status' => 'error',
-                    'message_status' => $errorMessage,
-                    'api_response' => $response
-                ];
-            }
+            return $stats;
+        } catch (Exception $e) {
+            // dd($e);
+            throw new Exception("Something went wrong.");
         }
-
-        return $stats;
     }
 
     /**

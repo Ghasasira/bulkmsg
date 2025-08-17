@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Upload, Search } from "lucide-react"
+import { Upload, Search, Trash2 } from "lucide-react"
 import AppLayout from "@/layouts/app-layout"
 import { BreadcrumbItem } from "@/types"
 import { Head, usePage, router } from "@inertiajs/react"
@@ -56,6 +56,16 @@ export default function CustomersPage() {
     })
   }
 
+  const handleEmptyTable = () => {
+    if (confirm("Are you sure you want to clear the customers table?")) {
+      router.delete(route("customers.empty"), {
+        onSuccess: () => {
+          console.log("All customers deleted successfully")
+        }
+      })
+    }
+  }
+
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Customers" />
@@ -73,6 +83,9 @@ export default function CustomersPage() {
             />
             <Button onClick={handleUpload} disabled={!file}>
               <Upload className="h-4 w-4 mr-2" /> Upload Excel
+            </Button>
+            <Button variant="destructive" onClick={handleEmptyTable}>
+              <Trash2 className="h-4 w-4 mr-2" /> Empty Table
             </Button>
           </div>
         </div>
@@ -99,10 +112,9 @@ export default function CustomersPage() {
                   <thead className="bg-gray-100">
                     <tr>
                       <th className="p-2 border">Name</th>
-                      <th className="p-2 border">Loan Amount</th>
-                      <th className="p-2 border">No. Due Days</th>
-                      <th className="p-2 border">Number 1</th>
-                      <th className="p-2 border">Number 2</th>
+                      <th className="p-2 border">Amount</th>
+                      <th className="p-2 border">Past Due</th>
+                      <th className="p-2 border">Contact</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -112,7 +124,6 @@ export default function CustomersPage() {
                         <td className="p-2 border">{c.local_amt}</td>
                         <td className="p-2 border">{c.no_due_days}</td>
                         <td className="p-2 border">{c.number1}</td>
-                        <td className="p-2 border">{c.number2}</td>
                       </tr>
                     ))}
                   </tbody>

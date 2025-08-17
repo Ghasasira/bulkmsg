@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Illuminate\Support\Facades\DB;
 
 class ContactsController extends Controller
 {
@@ -96,10 +97,17 @@ class ContactsController extends Controller
         return redirect()->back()->with('success', 'User updated successfully');
     }
 
-    public function destroy(Contact $user)
+    public function destroy(int $customerId)
     {
-        $user->delete();
+        $customer = Customer::findOrFail($customerId);
+        $customer->delete();
 
+        return redirect()->back()->with('success', 'User deleted successfully');
+    }
+
+    public function emptyCustomerTable()
+    {
+        DB::table('customers')->truncate();
         return redirect()->back()->with('success', 'User deleted successfully');
     }
 }

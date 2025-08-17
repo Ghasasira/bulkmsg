@@ -55,20 +55,22 @@ class MessageController extends Controller
 
         try {
             // Get phone numbers for selected contacts
-            $phoneNumbers = Customer::whereIn('id', $validated['recipients'])
-                ->pluck('number1')
-                ->toArray();
+            $customers = Customer::whereIn('id', $validated['recipients'])->get();
+            // ->pluck('number1')
+            // ->toArray();
 
-            if (empty($phoneNumbers)) {
+            if (empty($customers)) {
                 return redirect()->route('dashboard')->with('error', 'No valid phone numbers found for selected recipients');
             }
 
             // dd($phoneNumbers);
 
             if ($validated['type'] === 'sms') {
-                return $this->sendSMS($phoneNumbers, $validated['content']);
+                // dd("lets roll");
+                return $this->sendSMS($customers, $validated['content']);
             } elseif ($validated['type'] === 'whatsapp') {
-                return $this->sendWhatsApp($phoneNumbers, $validated['content']);
+                return;
+                // $this->sendWhatsApp($customers, $validated['content']);
             }
 
             return redirect()->route('dashboard')->with('error', 'Invalid message type');
@@ -77,11 +79,12 @@ class MessageController extends Controller
         }
     }
 
-    private function sendSMS(array $phoneNumbers, string $message)
+    private function sendSMS($customers, string $message)
     {
+        // dd($customers);
         // BulkSMSService handles formatting internally, so no pre-formatting needed
         $result = $this->smsService->sendBulkSms(
-            $phoneNumbers,
+            $customers,
             $message,
             config('app.name')
         );
@@ -96,10 +99,10 @@ class MessageController extends Controller
     }
 
 
-    private function sendWhatsApp(array $phoneNumbers, string $message)
+    private function sendWhatsApp($customers, string $message)
     {
         // Format phone numbers for WhatsApp (ensure they're in E.164 format)
-        $formattedNumbers = $this->formatPhoneNumbersForWhatsApp($phoneNumbers);
+        $formattedNumbers = $this->formatPhoneNumbersForWhatsApp($customers);
 
         // Send WhatsApp messages
         $result = $this->whatsappService->sendBulkWhatsApp($formattedNumbers, $message);

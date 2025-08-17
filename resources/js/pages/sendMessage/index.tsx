@@ -15,8 +15,11 @@ import { BreadcrumbItem } from "@/types"
 interface User {
   id: number
   name: string
-  phone: string
-  email: string
+  local_amt: string
+  no_due_days: number
+  number1: string
+  number2: string
+  created_at: string
 }
 
 type PageProps = {
@@ -46,7 +49,7 @@ export default function SendMessage() {
   })
 
   const filteredUsers = users.filter(
-    (user) => user.name.toLowerCase().includes(searchTerm.toLowerCase()) || user.phone.includes(searchTerm),
+    (user) => user.name.toLowerCase().includes(searchTerm.toLowerCase()) || user.number1.includes(searchTerm),
   )
 
   const handleUserToggle = (userId: number) => {
@@ -117,18 +120,36 @@ export default function SendMessage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="message">Message</Label>
-                  <Textarea
-                    id="message"
-                    placeholder="Type your message here..."
-                    value={data.content}
-                    onChange={(e) => setData('content', e.target.value)}
-                    rows={6}
-                    className="mt-2"
-                  />
-                  <div className="text-sm text-gray-500 mt-1">{data.content.length} characters</div>
-                  {errors.content && <p className="text-sm text-red-600 mt-1">{errors.content}</p>}
+                    <Label htmlFor="message">Message</Label>
+
+                    <Textarea
+                        id="message"
+                        placeholder="Type your message here..."
+                        value={data.content}
+                        onChange={(e) => setData('content', e.target.value)}
+                        rows={6}
+                        className="mt-2"
+                    />
+
+                    {/* Character count */}
+                    <div className="text-sm text-gray-500 mt-1">
+                        {data.content.length} characters
+                    </div>
+
+                    {/* Validation error */}
+                    {errors.content && (
+                        <p className="text-sm text-red-600 mt-1">{errors.content}</p>
+                    )}
+
+                    {/* Instruction for placeholders */}
+                    <div className="text-sm text-blue-600 mt-2">
+                        💡 Tip: Use <code>NAME</code> for the recipient’s name,
+                        <code> AMOUNT</code> for the amount, and
+                        <code> PASTDUE</code> for the number of past due days.
+                        <br /> Example: <em>Hello NAME, you owe AMOUNT. You are PASTDUE days overdue.</em>
+                    </div>
                 </div>
+
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -180,7 +201,7 @@ export default function SendMessage() {
                       />
                       <div className="flex-1">
                         <div className="font-medium">{user.name}</div>
-                        <div className="text-sm text-gray-500">{user.phone}</div>
+                        <div className="text-sm text-gray-500">{user.number1}</div>
                       </div>
                     </div>
                   ))}

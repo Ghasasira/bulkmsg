@@ -11,6 +11,5 @@ class Customer extends Model
         'local_amt',
         'no_due_days',
         'number1',
-        'number2',
     ];
 }

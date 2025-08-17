@@ -17,7 +17,7 @@ return new class extends Migration
             $table->decimal('local_amt', 15, 2);
             $table->integer('no_due_days');
             $table->string('number1');
-            $table->string('number2');
+            $table->string('number2')->nullable();
             $table->timestamps();
         });
     }
